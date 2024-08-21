@@ -25,17 +25,24 @@ function injectScript(componentElement, scriptContent) {
 }
 
 
-  function postProcessHeaders(headers, element) {
+function postProcessHeaders(headers, element) {
+    const scripts = headers.get('hydro-js');   
+    if (scripts) {
+        const scriptsArray = JSON.parse(scripts);
 
-        //used by ExecuteJs
-        const scripts = headers.get('hydro-js');
-            if (scripts) {
-                const scriptsArray = JSON.parse(scripts);
-                scriptsArray.forEach(script => {
-                    injectScript(element, script);
-                });
+        scriptsArray.forEach(script => {
+
+            const js = script['Script'];
+            let = targetElement = element;
+            if (!targetElement) {
+                const elementId = script['Id'];
+                targetElement = document.getElementById(elementId);                            
             }
-  }
+            injectScript(targetElement, js);
+        });
+    }
+}
+
 
     function execProperScripts(element) {
       const scripts = element.querySelectorAll('script:not([type]):not([data-injected]), script[type="text/javascript"]:not([data-injected])');
@@ -102,11 +109,11 @@ function injectScript(componentElement, scriptContent) {
           history.pushState({}, '', url);
         }
 
+ 
           if (selector === findLocationTarget() && !window.location.hash) {
               window.scrollTo(0, 0);
           }
-          else {
-            
+          else {            
                 const element = document.querySelector(window.location.hash);              
                  if (element) {
                     element.scrollIntoView({
@@ -473,6 +480,8 @@ function injectScript(componentElement, scriptContent) {
             let locationData = JSON.parse(locationHeader);
 
             await loadPageContent(locationData.path, locationData.target || findLocationTarget(), true, null, locationData.payload);
+
+            postProcessHeaders(response.headers);
           }
 
           const redirectHeader = response.headers.get('Hydro-Redirect');

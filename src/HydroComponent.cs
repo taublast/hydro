@@ -34,7 +34,9 @@ public abstract class HydroComponent : ViewComponent
 
     private static readonly ConcurrentDictionary<Type, List<HydroPoll>> Polls = new();
 
-    private readonly List<string> _clientScripts = new();
+    public record ComponentScript(string Id, string Script);
+
+    private readonly List<ComponentScript> _clientScripts = new();
     private readonly List<HydroComponentEvent> _dispatchEvents = new();
     private readonly HashSet<HydroEventSubscription> _subscriptions = new();
 
@@ -685,12 +687,13 @@ public abstract class HydroComponent : ViewComponent
         return scriptNode;
     }
 
-    private HtmlNode GetStaticScript(HtmlDocument document, string script)
+    private HtmlNode GetStaticScript(HtmlDocument document, ComponentScript script)
     {
         var scriptNode = document.CreateElement("script");
         scriptNode.SetAttributeValue("hydro-js", "true");
+        scriptNode.SetAttributeValue("hydro-id", script.Id);
         scriptNode.SetAttributeValue("type", "text/hydro");
-        scriptNode.InnerHtml = script;
+        scriptNode.InnerHtml = script.Script;
         return scriptNode;
     }
 
@@ -1129,7 +1132,7 @@ public abstract class HydroComponent : ViewComponent
     /// <param name="script"></param>
     public void ExecuteJs(string script)
     {
-        _clientScripts.Add(script);
+        _clientScripts.Add(new(this.ComponentId, script));
     }
 
     private static string Hash(string input) =>
@@ -1141,7 +1144,7 @@ public abstract class HydroComponent : ViewComponent
     /// </summary>
     /// <typeparam name="T"></typeparam>
     /// <param name="model"></param>
-    /// <param name="preValidate"></param>
+    /// <param name="preValidate"></param>          
     /// <returns></returns>
     public virtual async Task<bool> BindFormAndValidateAsync<T>(T model, Action<T, ModelStateDictionary> preValidate = null)
     {
