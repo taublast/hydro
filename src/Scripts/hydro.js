@@ -13,7 +13,15 @@ function injectScript(componentElement, scriptContent) {
     })(document.getElementById("${componentElement.id}"));
   `;
   script.setAttribute('data-injected', 'true');
-  componentElement.appendChild(script);
+   let attachTo = document.getElementById('hydro-location');          
+    if (attachTo) {
+        attachTo.appendChild(script);
+    }
+    else{
+        //document.body.appendChild(script);
+        componentElement.appendChild(script);
+    }
+ 
 }
 
   function injectScriptAtSamePosition(existingScript) {
@@ -38,6 +46,7 @@ function postProcessHeaders(headers, element) {
                 const elementId = script['Id'];
                 targetElement = document.getElementById(elementId);                            
             }
+
             injectScript(targetElement, js);
         });
     }
