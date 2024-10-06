@@ -830,3 +830,17 @@ document.addEventListener('alpine:init', () => {
     });
   })
 });
+
+//todo add key
+
+async function callComponentAction(findName, actionName, parameters) {
+    let element = document.querySelector('[hydro-name="'+findName+'"]');
+    await window.Hydro.hydroAction(element, window.Hydro.findComponent(element), { name: actionName, parameters: parameters});
+}
+
+//todo add key
+
+async function updateComponent(findName) {
+    let element = document.querySelector('[hydro-name="'+findName+'"]');
+    await window.Hydro.hydroAction(element, window.Hydro.findComponent(element), { name: "UpdateState"});
+}

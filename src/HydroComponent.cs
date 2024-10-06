@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -460,6 +462,12 @@ public abstract class HydroComponent : ViewComponent
             : string.Empty;
     }
 
+    public void SkipOutput()
+    {
+        _skipOutput = true;
+        HttpContext.Response.Headers.TryAdd(HydroConsts.ResponseHeaders.SkipOutput, "True");
+    }
+
     private async Task<string> RenderOnlineNestedComponent(IPersistentState persistentState)
     {
         var componentId = GenerateComponentId(Key);
@@ -770,8 +778,7 @@ public abstract class HydroComponent : ViewComponent
 
         if (methodAttributes.Any(a => a.GetType() == typeof(SkipOutputAttribute)))
         {
-            _skipOutput = true;
-            HttpContext.Response.Headers.TryAdd(HydroConsts.ResponseHeaders.SkipOutput, "True");
+            SkipOutput();
         }
 
         var operationId = HttpContext.Request.Headers.TryGetValue(HydroConsts.RequestHeaders.OperationId, out var incomingOperationId)
@@ -802,6 +809,33 @@ public abstract class HydroComponent : ViewComponent
                     return Enum.ToObject(p.ParameterType, requestParameter);
                 }
 
+
+                if (typeof(JObject).IsAssignableFrom(sourceType))
+                {
+                    var dict = new Dictionary<string, object>();
+
+                    var jObject = requestParameter as JObject;
+
+                    foreach (var property in jObject.Properties())
+                    {
+                        if (property.Value is JValue jValue)
+                        {
+                            dict[property.Name] = jValue.Value; // Handles primitive types
+                        }
+                        else
+                        {
+                            dict[property.Name] = property.Value.ToString(); // Handles nested objects or arrays as strings
+                        }
+                    }
+
+                    return dict;
+                }
+
+                if (p.ParameterType == typeof(string))
+                {
+                    return requestParameter.ToString();
+                }
+
                 return TypeDescriptor.GetConverter(p.ParameterType).ConvertFrom(requestParameter);
             })
             .ToArray();
@@ -814,6 +848,36 @@ public abstract class HydroComponent : ViewComponent
         {
             methodInfo.Invoke(this, orderedParameters);
         }
+    }
+
+    public static T ToAnonymousType<T>(JObject source, T destinationType)
+    {
+        return source.ToObject<T>();
+    }
+
+    public static IDictionary<string, object> FlattenJObject(JObject jObject)
+    {
+        var result = new Dictionary<string, object>();
+
+        foreach (var property in jObject.Properties())
+        {
+            if (property.Value is JObject nestedObject)
+            {
+                var nestedDict = FlattenJObject(nestedObject);
+                foreach (var kvp in nestedDict)
+                {
+                    result[kvp.Key] = kvp.Value;
+                }
+            }
+            else
+            {
+                result[property.Name] = property.Value.Type == JTokenType.Boolean
+                    ? property.Value.ToObject<bool>()
+                    : property.Value.ToString();
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -961,16 +1025,16 @@ public abstract class HydroComponent : ViewComponent
     {
         switch (parameters)
         {
-        case null:
-        return;
+            case null:
+                return;
 
-        case IDictionary<string, object> dictionary:
-        ApplyObjectFromDictionary(this, dictionary);
-        break;
+            case IDictionary<string, object> dictionary:
+                ApplyObjectFromDictionary(this, dictionary);
+                break;
 
-        default:
-        ApplyObject(this, parameters);
-        break;
+            default:
+                ApplyObject(this, parameters);
+                break;
         }
 
         await OnParametersSetAsync();
@@ -1182,14 +1246,17 @@ public abstract class HydroComponent : ViewComponent
         if (modelBindingContext.Result.IsModelSet)
         {
             var validationResults = new HashSet<ValidationResult>();
-            var isValid = Validator.TryValidateObject(model, new ValidationContext(model, HttpContext.RequestServices, null), validationResults, true);
-            if (!isValid)
+            if (model != null)
             {
-                foreach (var validationResult in validationResults)
+                var isValid = Validator.TryValidateObject(model, new ValidationContext(model, HttpContext.RequestServices, null), validationResults, true);
+                if (!isValid)
                 {
-                    foreach (var memberName in validationResult.MemberNames)
+                    foreach (var validationResult in validationResults)
                     {
-                        modelBindingContext.ModelState.AddModelError(memberName, validationResult.ErrorMessage);
+                        foreach (var memberName in validationResult.MemberNames)
+                        {
+                            modelBindingContext.ModelState.AddModelError(memberName, validationResult.ErrorMessage);
+                        }
                     }
                 }
             }
@@ -1210,4 +1277,23 @@ public abstract class HydroComponent : ViewComponent
 
         return ModelState.IsValid;
     }
+
+    public void UpdateComponent<T>(string key = null)
+    {
+        ExecuteJs($"updateComponent('{typeof(T).Name}')");
+    }
+
+    public void CallComponentAction<T>(string actionName, object parameters = null, string key = null)
+    {
+        if (parameters != null)
+        {
+            //todo
+
+        }
+        else
+        {
+            ExecuteJs($"callComponentAction('{typeof(T).Name}', `{actionName}`)");
+        }
+    }
+
 }
